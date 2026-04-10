@@ -1,0 +1,173 @@
+\documentclass[sigconf,nonacm]{acmart}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\begin{document}
+
+\title{Quadratic Assignment Problem: Complexity, Max-Min Branch \& Bound, and Path Relinking Tabu Search}
+
+\author{Md. Jakaria Hossain}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005026}
+
+\author{Musa Tur Farazi}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005038}
+
+\author{Md. As-Aid Rahman}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005039}
+
+\author{MD Sajid Mostafiz Noor}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005051}
+
+\author{Tausif Rashid}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005052}
+
+\author{Awesh Islam}
+\affiliation{%
+  \country{BUET}
+}
+\email{2005054}
+
+\begin{abstract}
+The Quadratic Assignment Problem (QAP) is a fundamental combinatorial optimization problem in the field of facility location and operations research. This report outlines the complexity of QAP, demonstrating its NP-hardness through reductions from the Symmetric Traveling Salesman Problem and Balanced Cut. We examine exact methods via Branch and Bound (B\&B) and metaheuristics using Tabu Search (TS). We introduce novel modifications: a Max-Min Branching dynamic exploration strategy coupled with a TS Warm-Start for B\&B, and an Elite Path Relinking mechanism paired with Reactive Tenure for Tabu Search. We evaluate these high-performance C++ implementations against QAPLIB benchmarks, demonstrating significant improvements in pruning bound efficiency and deep local optima evasion.
+\end{abstract}
+
+\keywords{Quadratic Assignment Problem, Branch and Bound, Tabu Search, Path Relinking, Metaheuristics, Combinatorial Optimization}
+
+\maketitle
+
+\section{Introduction}
+The Quadratic Assignment Problem (QAP) models the allocation of a set of facilities to a set of locations, with costs proportional to the product of flow between facilities and distance between locations. Originally formulated by Koopmans and Beckmann in 1957, the QAP remains one of the most intellectually challenging operations research problems.
+
+Given a flow matrix $F \in \mathbb{R}^{n \times n}$ and a distance matrix $D \in \mathbb{R}^{n \times n}$, the problem is to find an assignment permutation $\pi$ that minimizes the total weighted distance:
+\begin{equation}
+    \min_{\pi} \sum_{i=1}^n \sum_{j=1}^n F_{ij} D_{\pi(i),\pi(j)}
+\end{equation}
+This assignment problem serves as the mathematical foundation for varied real-world applications including VLSI and chip design layout mapping, hospital building arrangements, and ergonomic keyboard layouts.
+
+\section{Complexity Theory}
+The QAP decision problem is definitively NP-Complete, meaning the minimization optimization is NP-Hard. It subsumes several other NP-Hard problems. We formally prove NP-Hardness via two classical reductions:
+
+\subsection{Reduction 1: Symmetric Traveling Salesman Problem (STSP) to QAP}
+The Symmetric Traveling Salesman Problem (STSP) can be reduced to QAP in polynomial time ($\text{STSP} \le_p \text{QAP}$). By converting the STSP city distance matrix into the QAP distance matrix $D$, and defining the QAP flow matrix $F$ as the adjacency matrix of a standard $n$-cycle, we establish the following key lemma for any permutation $\pi$:
+\begin{equation}
+    C_{\text{QAP}}(\pi) = 2\cdot\mathrm{TourLen}(\pi)
+\end{equation}
+
+\textbf{Proof Formulation:}
+\begin{align}
+  C_{\text{QAP}}(\pi) &= \sum_{i=1}^n\sum_{j=1}^n F_{ij}\,D_{\pi(i),\pi(j)} \nonumber \\
+  &= \sum_{\{i,j\}:\,F_{ij}=1} \bigl(D_{\pi(i),\pi(j)}+D_{\pi(j),\pi(i)}\bigr) \nonumber \\
+  &= 2\sum_{e\in\text{cycle}} D_{\pi(\text{endpoints of }e)} \nonumber \\
+  &= 2\cdot\mathrm{TourLen}(\pi)
+\end{align}
+Since the STSP decision problem is NP-Complete, verifying $C_{\text{QAP}}(\pi) \le 2L$ efficiently solves the STSP cost bound $L$. Thus, bounding the QAP optimally solves the STSP, confirming QAP decision is NP-Complete and its optimization is NP-Hard.
+
+\subsection{Reduction 2: Balanced Cut to QAP}
+Given a graph partition instance requiring a bisection cut bounding $S(\pi)=\{u : \pi(u)\in A\}$, one can translate the graph weights into the QAP flow matrix $F = W$ (adjacency weights), and formulate a bipartite boolean distance matrix $D$ such that cross-group distances evaluate to $1$ ($D_{A,B} = D_{B,A} = 1$) and intra-group distances evaluate to $0$ ($D_{A,A} = D_{B,B} = 0$). 
+
+\textbf{Associated Lemma and Proof:}
+For any balanced group assignment $\pi$:
+\begin{equation}
+  C_{\text{QAP}}(\pi) = 2\cdot\mathrm{Cut}\bigl(S(\pi)\bigr)
+\end{equation}
+Each iteration aggregates the component bounds:
+$$F_{uv}\,D_{\pi(u),\pi(v)} = w_{uv}\cdot\mathbf{1}[\text{different partition groups}]$$
+Summing precisely over all directed ordered pairs causes each bidirectional cut edge $(u,v)$ to be counted precisely twice (once navigating forward and once inverted). By optimizing the assignment function locally, QAP faithfully encodes balanced graph partitioning, definitively securing QAP optimizations as NP-Hard constraints natively representing optimal graph bi-partitionings.
+
+\section{Existing Algorithms}
+Two core paradigms historically evaluate QAP domains:
+\begin{enumerate}
+    \item \textbf{Branch-and-Bound (B\&B):} Exhaustively constructs partial assignment trees. The most critical component is the Gilmore-Lawler Bound (GLB), which forms the optimistic lowest feasible cost using a linear assignment problem (LAP) heuristic solver. B\&B guarantees optimality but scales incredibly poorly past $n=14$.
+    \item \textbf{Tabu Search (TS):} A dynamic local search strategy employing a short-term memory cache (`tabu list') to disallow reversing immediate 2-swap history moves. Leveraging Taillard's $\mathcal{O}(n)$ incremental delta evaluation, TS excels on dense matrices but risks cycling in wide state basins.
+\end{enumerate}
+
+\section{Proposed Novel Modifications}
+To elevate the solver capacity, we enacted a rigorous structural enhancement architecture written entirely in C++ overhead structures.
+
+\subsection{Novel B\&B: Dynamic Max-Min Branching and TS Warm Start}
+Standard implementations branch arbitrarily on the next free facility, or follow a static pre-sorted list (LB-Ordered DFS). 
+Our primary novel enhancement dynamically constructs the search tree using a \textbf{Max-Min Branching} methodology. At every node, we tentatively survey every unassigned facility $i$. For each $i$, we compute the Gilmore-Lawler Lower Bound for assigning it to all unassigned constraints $j$, logging the minimum bound $\min_j \text{LB}(i \to j)$. We selectively choose the branch facility $i^*$ that maximizes this minimum lower bound. This aggressively channels exploration to branches destined to exceed the Upper Bound, precipitating rapid pruning phases.
+
+Moreover, rather than starting with an indeterminate $UB=\infty$, the algorithm operates a sub-millisecond \textbf{TS Warm Start}. We execute iterative Tabu Search iterations strictly bounding initial tree pruning.
+
+\subsection{Novel TS: Reactive Tenure with Elite Path Relinking}
+Fixed tenure TS causes oscillatory behavior in rugged QAP graph plains. By incorporating \textbf{Reactive Tenure}, we adapt the tabu timeout constraint based on a randomized rolling hash memory cache. If identical permutation hashes arise recursively, the tenure exponentially climbs; otherwise, it systematically decays.
+
+Crucially, standard iterations rely on entirely randomized shakes to escape heavy local minimum loops. We introduce \textbf{Elite Path Relinking}. We compile an active, dynamically sorted ``Elite Pool” harboring the 5 best globally optimal topographically separated permutations. When stagnation limits exceed $10n$ cycles, two elites are selected. Path relinking operates as structural bridging: swapping the origin coordinate sequences gradually to mimic the target state parameters, logging deep valley minimums along the path, entirely bypassing inefficient random perturbation.
+
+\section{Experimental Results}
+Our algorithmic testbed leverages the universally established QAPLIB benchmarks, parsing instances ranging from $n=12$ up to $n=30$. The results exhibit drastic improvements under identical conditions (60.0s B\&B timeout limit, $1000 \times n/10$ TS iteration scopes). As Branch and Bound (B\&B) evaluates the mathematical exact optimum, it natively maintains a 0\% optimality gap for any instance it successfully scales entirely prior to termination. Thus, we focus its evaluation on node pruning metrics and absolute runtime speed scaling.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/bb_runtime_cpp.pdf}
+    \caption{Branch \& Bound Runtime Comparison exhibiting massive scalability improvements via Max-Min dynamic pruning.}
+    \vspace{-1em}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/bb_nodes_cpp.pdf}
+    \caption{Total Nodes Explored across B\&B algorithms exposing the efficiency of the TS Warm-start bounding constraints.}
+    \vspace{-1em}
+\end{figure}
+
+The \textbf{Branch \& Bound} optimizations profoundly reduced the total volume of nodes explored. By maximizing pruning potentials via the dynamic Max-Min Branching heuristic combined with near-perfect Tabu boundaries scaling the roots, instances like \texttt{nug14} process identically tighter thresholds orders of magnitude quicker than naive approaches.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/ts_gap_cpp.pdf}
+    \caption{Optimality Gap distributions across robust TS vs Novel Elite Path Relinking Tabu parameters.}
+    \vspace{-1em}
+\end{figure}
+
+The \textbf{Tabu Search} implementations highlight precisely where static heuristics falter. Reactive TS accompanied by proactive Elite Path Relinking rapidly collapsed solution margins natively to strict mathematical optimal metrics across historically complex Tai and Chr parameters, bypassing premature optimization plateaus common to memoryless architectures.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/ts_time_cpp.pdf}
+    \caption{Scalability of Tabu Search algorithms plotted across variable QAP dimensions showing linear iterative overhead distributions.}
+    \vspace{-1em}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/memory_comparison_cpp.pdf}
+    \caption{Peak Resident Set Size (RSS) memory comparison across all integrated algorithm architectures natively tracking /proc OS allocations.}
+    \vspace{-1em}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/algorithm_comparison_cpp.pdf}
+    \caption{Direct Algorithm Comparison evaluating absolute percentage gaps targeting the optimal QAPLIB definitions.}
+    \vspace{-1em}
+\end{figure}
+
+\section{Conclusion}
+This report explored robust algorithmic improvements for the NP-Hard Quadratic Assignment Problem. Shifting structurally toward dynamic heuristic branch evaluations paired with strong memory-relinking techniques profoundly advances the state of achievable minimum tolerances on dense matrix evaluations.
+
+\nocite{*}
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{report}
+
+\end{document}
