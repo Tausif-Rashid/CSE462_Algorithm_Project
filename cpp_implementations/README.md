@@ -1,6 +1,6 @@
 # C++ QAP Implementations
 
-This directory contains high-performance C++ implementations of the Quadratic Assignment Problem algorithms (both foundational and novel enhancements) alongside their automated benchmarking suite and formal LaTeX report.
+This directory contains C++ implementations of the Quadratic Assignment Problem algorithms (both foundational and modifications) alongside their automated benchmarking suite.
 
 ## Directory Structure
 - `qap_solver.cpp`: The core C++ engine. Features:
@@ -10,7 +10,7 @@ This directory contains high-performance C++ implementations of the Quadratic As
   - `ts_novel`: Features Elite Path Relinking scaling diversification structurally mapped rather than relying on randomized shake, coupled with Reactive Tenure scaling based on collision iterations.
 - `Makefile`: Script to build `qap_solver` utilizing `-O3` gcc optimization hooks.
 - `run_cpp_benchmarks.py`: Fully automates `qapLIB` instance data ingestion natively bypassing OS manual intervention. Parses solver constraints and exports metrics including runtime, total traversed nodes/iterations, and Peak Child RSS Memory profiles into `results_cpp.csv`. Automatically maps 6 evaluation distributions into the `plots/` subdirectory.
-- `report/`: The ACM-formatted final delivery paper. Renders algorithmic contexts directly linking the generated matplotlib PDFs.
+
 
 ## How to Compile & Run
 
